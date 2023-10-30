@@ -27,12 +27,12 @@ public class SenderMain {
   //Main method to run the router simulator
   public static void main(String[] args) throws Exception {
 
-    String host = args[0];
-    int port = Integer.parseInt(args[1]);
-    SocketAddress address = new InetSocketAddress(InetAddress.getByName(host), port);
+//    String host = args[0];
+//    int port = Integer.parseInt(args[1]);
+//    SocketAddress address = new InetSocketAddress(InetAddress.getByName(host), port);
 
     DatagramChannel dc = DatagramChannel.open();
-    dc.connect(address);
+//    dc.connect(address);
 
     Sender s = new Sender(dc);
     s.run();
@@ -128,5 +128,14 @@ class Packet{
     this.data = data;
     this.seq = seq;
   }
+
+
+  public String toString(){
+    int maskedValue = this.seq & 0xFF;
+    String binary = String.format("%8s", Integer.toBinaryString(maskedValue)).replace(' ', '0');
+    String text = new String(this.data, java.nio.charset.StandardCharsets.UTF_8);
+    return "Packet: -"+binary+text+"-";
+  }
+
 }
 
