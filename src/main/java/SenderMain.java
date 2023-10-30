@@ -1,9 +1,11 @@
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Queue;
@@ -44,109 +46,66 @@ class Sender{
     this.index = 0;
   }
 
-  public void run(){
+  public void run() throws IOException {
 
-//    Thread buildPackets = new Thread(() -> {
-//      try {
-//        //Initialization:
-//        byte[] data = new byte[dataLength];
-//        int seq = 0;
-//
-//        //Create packets from the input
-//        while (true) {
-//          int count;
-//          while ((count = System.in.read(data)) != -1) {
-//            System.out.println(count);
-//            Packet p = new Packet(data, seq, count);
-//            packets.add(p);
-//            seq++;
-//            data = new byte[dataLength];
-//          }
-//        }
-//      } catch (Exception e) {
-//        e.printStackTrace();
-//      }
-//
-//    });
 
+    //Scan Input:
     Scanner sc = new Scanner(System.in);
     StringBuilder input = new StringBuilder();
-
     while (true) {
-      int count;
-      while ((count = System.in.read(data)) != -1) {
-        System.out.println(count);
-        Packet p = new Packet(data, seq, count);
-        packets.add(p);
-        seq++;
-        data = new byte[dataLength];
+      String line = sc.nextLine();
+      if (line.isEmpty()) {
+        break;
       }
+      input.append(line).append(System.lineSeparator());
+    }
+    sc.close();
+
+    //Build Packets:
+    byte[] data = input.toString().getBytes(StandardCharsets.UTF_8);
+    int seq = 0;
+
+    for(int i=0; i<data.length; i+=this.dataLength){
+      int end = Math.min(data.length, i+this.dataLength);
+      byte[] dataChunk = Arrays.copyOfRange(data, i, end);
+      Packet p = new Packet(dataChunk, seq, this.dataLength);
+      packets.add(p);
+      seq++;
     }
 
-    Thread outputThread = new Thread(() -> {
-
-      while (true) {
-        try{
-
-        if (packets.isEmpty()) {
-          try {
-            Thread.sleep(100); // Wait if there's no data
-          } catch (InterruptedException e) {
-            e.printStackTrace();
-          }
-        }
-
-        if(!packets.isEmpty()){
-          synchronized (packets) {
-
-            //Add packets to sending set
-            while(activePackets.size() < this.window
-            && !packets.isEmpty()){
-              activePackets.add(this.packets.poll());
-            }
+    //Send Packets:
+    while (!packets.isEmpty()) {
 
 
-            //Send all packets in sending set
-            for(Packet p: this.activePackets){
-              System.out.println("Send: " + p.toString());
-              ByteBuffer buffer = ByteBuffer.wrap(p.toBytes());
-              this.dc.write(buffer);
-            }
-
-            //Wait for all packets to be received:
-            while(!this.activePackets.isEmpty()){
-              ByteBuffer buffer = ByteBuffer.allocate(1024);
-              buffer.clear();
-              this.dc.receive(buffer);
-              buffer.flip();
-              byte[] data = new byte[buffer.limit()];
-              buffer.get(data);
-
-              String dataString = new String(data, StandardCharsets.UTF_8);
-              String[] dataSplit = dataString.split("-");
-              int seqAck = Integer.parseInt(dataSplit[0]);
-              Packet toRemove = new Packet(seqAck);
-              System.out.println("Received Ack for " + seqAck);
-              this.activePackets.remove(toRemove);
-            }
-          }
-        }
-
-        } catch(Exception e){
-          e.printStackTrace();
-        }
-
+      //Fill up window
+      while(activePackets.size() < this.window && !packets.isEmpty()){
+        activePackets.add(this.packets.poll());
       }
-    });
 
-//    buildPackets.start();
-    outputThread.start();
 
-    try {
-//      buildPackets.join();
-      outputThread.join();
-    } catch (InterruptedException e) {
-      e.printStackTrace();
+      //Send all packets in window
+      for(Packet p: this.activePackets){
+        System.out.println("Send: " + p.toString());
+        ByteBuffer buffer = ByteBuffer.wrap(p.toBytes());
+        this.dc.write(buffer);
+      }
+
+      //Wait for all packets to be received:
+      while(!this.activePackets.isEmpty()){
+        ByteBuffer buffer = ByteBuffer.allocate(1024);
+        buffer.clear();
+        this.dc.receive(buffer);
+        buffer.flip();
+        byte[] incomingData = new byte[buffer.limit()];
+        buffer.get(incomingData);
+
+        String dataString = new String(incomingData, StandardCharsets.UTF_8);
+        String[] dataSplit = dataString.split("-");
+        int seqAck = Integer.parseInt(dataSplit[0]);
+        Packet toRemove = new Packet(seqAck);
+        System.out.println("Received Ack for " + seqAck);
+        this.activePackets.remove(toRemove);
+      }
     }
   }
 
