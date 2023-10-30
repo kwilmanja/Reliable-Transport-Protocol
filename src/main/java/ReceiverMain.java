@@ -27,6 +27,16 @@ public class ReceiverMain {
 
 
 
+
+  }
+
+}
+
+class Receiver{
+
+  public Receiver() throws IOException {
+    DatagramChannel dc = DatagramChannel.open();
+
   }
 
 }

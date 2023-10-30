@@ -27,9 +27,8 @@ class NetUtil {
   }
 
   //Send the JSONObject over the DatagramChannel
-  public static void sendMessage(JSONObject msg, DatagramChannel dc) throws IOException {
-    byte[] messageBytes = msg.toString().getBytes(StandardCharsets.UTF_8);
-    ByteBuffer buffer = ByteBuffer.wrap(messageBytes);
+  public static void sendMessage(byte[] msg, DatagramChannel dc) throws IOException {
+    ByteBuffer buffer = ByteBuffer.wrap(msg);
     dc.write(buffer);
   }
 

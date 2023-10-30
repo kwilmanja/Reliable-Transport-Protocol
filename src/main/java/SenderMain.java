@@ -27,80 +27,106 @@ public class SenderMain {
   //Main method to run the router simulator
   public static void main(String[] args) throws Exception {
 
-//    String host = args[0];
-//    int port = Integer.parseInt(args[1]);
-//    SocketAddress address = new InetSocketAddress(InetAddress.getByName(host), port);
-//
-//    DatagramChannel dc = DatagramChannel.open();
-//    dc.connect(address);
+    String host = args[0];
+    int port = Integer.parseInt(args[1]);
+    SocketAddress address = new InetSocketAddress(InetAddress.getByName(host), port);
 
-    Scanner sc = new Scanner(System.in);
-    StringBuilder sb = new StringBuilder();
-    ArrayList<byte[]> packets = new ArrayList<>();
-    int packetLength = 1024;
+    DatagramChannel dc = DatagramChannel.open();
+    dc.connect(address);
 
-    while(true){
+    Sender s = new Sender(dc);
+    s.run();
+  }
 
-      byte[] packet = new byte[packetLength];
-      int bytesRead;
 
-      while((bytesRead = System.in.read(packet)) != -1){
-//        offset += bytesRead;
-        System.out.println("pakcket: " + new String(packet, java.nio.charset.StandardCharsets.UTF_8));
-        packet = new byte[packetLength];
+}
+
+
+class Sender{
+
+  public DatagramChannel dc;
+  public final ArrayList<Packet> packets = new ArrayList<>();
+  public int packetLength;
+  public int seq;
+
+  public Sender(DatagramChannel dc){
+    this.dc = dc;
+    this.seq = 0;
+    this.packetLength = 1024;
+  }
+
+  public void run(){
+
+    Thread inputThread = new Thread(() -> {
+      try {
+        //Initialization:
+        byte[] data = new byte[packetLength];
+
+
+        //Create packets from the input
+        while (true) {
+          while (System.in.read(data) != -1) {
+            Packet p = new Packet(data, seq);
+            packets.add(p);
+            data = new byte[packetLength];
+          }
+        }
+      } catch (Exception e) {
+        e.printStackTrace();
       }
-//
-//      for(byte[] data : packets){
-//        System.out.println(new String(data, java.nio.charset.StandardCharsets.UTF_8));
-//      }
 
-//      while(sc.hasNext()) {
-//        sb.append(sc.next());
-//        byte[] data = sb.toString().getBytes(StandardCharsets.UTF_8);
-//
-//        int offset = 0;
-//        while (offset < data.length) {
-//          int packetLength = Math.min(packetSize, data.length - offset);
-//          byte[] packet = new byte[packetLength];
-//          System.arraycopy(data, offset, packet, 0, packetLength);
-//          packets.add(packet);
-//          offset += packetLength;
-//        }
-//
-//
-//        for(byte[] packet : packets){
-//          System.out.println(new String(packet, java.nio.charset.StandardCharsets.UTF_8));
-//        }
-//
-//      }
+    });
+
+    Thread outputThread = new Thread(() -> {
+      while (true) {
+
+        if (packets.isEmpty()) {
+          try {
+            Thread.sleep(100); // Wait if there's no data
+          } catch (InterruptedException e) {
+            e.printStackTrace();
+          }
+        }
+
+        synchronized (packets) {
+          for(Packet p : packets){
+            System.out.println("Sent: " + p.toString());
+          }
+          packets.clear();
+        }
+      }
+    });
+
+
+    inputThread.start();
+    outputThread.start();
+
+    try {
+      inputThread.join();
+      outputThread.join();
+    } catch (InterruptedException e) {
+      e.printStackTrace();
     }
-
-//    while(true) {
-//      List<byte[]> packets = convertStdinToPackets(1024);
-//
-//      // Process or store the packets as needed
-//      for (byte[] packet : packets) {
-//        System.out.println(packet + "::" + new String(packet, java.nio.charset.StandardCharsets.UTF_8));
-//      }
-//    }
   }
 
-//    public static List<byte[]> convertStdinToPackets(int packetSize) {
-//      List<byte[]> packets = new ArrayList<>();
-//      byte[] buffer = new byte[packetSize];
-//      int bytesRead;
-//
-//      try {
-//        while ((bytesRead = System.in.read(buffer)) != -1) {
-//          byte[] packet = new byte[bytesRead];
-//          System.arraycopy(buffer, 0, packet, 0, bytesRead);
-//          packets.add(packet);
-//        }
-//      } catch (IOException e) {
-//        e.printStackTrace();
-//      }
-//
-//      return packets;
-//    }
+}
+
+class SendPacketThread extends Thread{
+
+  public SendPacketThread(){
+
   }
+
+}
+
+class Packet{
+
+  public byte[] data;
+  public int seq;
+
+  public Packet(byte[] data, int seq){
+    this.data = data;
+    this.seq = seq;
+  }
+}
 
