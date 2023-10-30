@@ -1,4 +1,4 @@
-import java.util.Arrays;
+import java.nio.charset.StandardCharsets;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -11,80 +11,80 @@ public class ReceiverMain {
   //Main method to run the router simulator
   public static void main(String[] args) throws Exception {
     Receiver receiver = new Receiver();
-    receiver.receiveAndPrintData();
+    receiver.run();
   }
 
 }
 
 class Receiver{
-  private DatagramChannel datagramChannel;
-  private Map<Integer, byte[]> receivedData;
-  private int expectedSeq;
+  private DatagramChannel dc;
+  private Map<Integer, ReceiverPacket> receivedData;
+  private int printIndex;
   private int windowSize;
 
   public Receiver() throws IOException {
-    datagramChannel = DatagramChannel.open();
-    datagramChannel.bind(new InetSocketAddress(0));
+    dc = DatagramChannel.open();
+    dc.bind(new InetSocketAddress(3000));
+    System.err.println("Bound to port 3000");
     receivedData = new HashMap<>();
-    expectedSeq = 0;
+    printIndex = 0;
     windowSize = 2; // Set desired window size
   }
 
-  public void receiveAndPrintData() {
-    ByteBuffer buffer = ByteBuffer.allocate(1500);
+  public void run() {
     while (true) {
       try {
-        datagramChannel.receive(buffer);
-        buffer.flip();
 
+        //Read data and create packet
+        ByteBuffer buffer = ByteBuffer.allocate(2000);
+        if(dc.isConnected()){
+          dc.receive(buffer);
+        } else{
+          dc.connect(dc.receive(buffer));
+        }
+        buffer.flip();
         byte[] packetData = new byte[buffer.remaining()];
         buffer.get(packetData);
-
         ReceiverPacket packet = ReceiverPacket.parse(packetData);
 
         if (packet != null) {
-          int packetSeq = packet.getSeq();
+          this.receivedData.put(packet.getSeq(), packet);
+          this.sendAck(packet);
 
-          // Check if the received packet is within the expected sequence number
-          if (packetSeq >= expectedSeq) {
-            // Check if the packet is not a duplicate
-            if (packetSeq == expectedSeq && !receivedData.containsKey(packetSeq)) {
-              // Print the data to stdout
-              System.out.print(packet.getDataString());
-
-              // Store the received data
-              receivedData.put(expectedSeq, packet.getData());
-
-              // Update the eggspected sequence number
-              expectedSeq++;
-
-              // Check for addition consecutive packets in the buffer
-              while (receivedData.containsKey(expectedSeq)) {
-                byte[] nextPacketData = receivedData.get(expectedSeq);
-                System.out.print(new String(nextPacketData));
-
-                // Remove processed data from storage
-                receivedData.remove(expectedSeq);
-                expectedSeq++;
-              }
-            }
+          //Print any packets we can:
+          while(receivedData.containsKey(this.printIndex)){
+            ReceiverPacket toPrint = receivedData.get(printIndex);
+            System.out.print(this.printIndex + toPrint.getData());
+            this.printIndex++;
           }
         }
-        buffer.clear();
+
+
+
+
+
       } catch (IOException e) {
         e.printStackTrace();
       }
     }
   }
 
+  private void sendAck(ReceiverPacket packet) throws IOException {
+    this.toString().getBytes(StandardCharsets.UTF_8);
+    String seq = String.format("%4s", packet.getSeq()).replace(" ", "0");
+    String ack = seq + "-";
+    ByteBuffer buffer = ByteBuffer.wrap(ack.getBytes(StandardCharsets.UTF_8));
+    this.dc.write(buffer);
+  }
+
 }
 
 class ReceiverPacket {
 
-  private byte[] data;
+  private String data;
   private int seq;
 
-  public ReceiverPacket(byte[] data, int seq) {
+  public ReceiverPacket(String data, int seq) {
     this.data = data;
     this.seq = seq;
   }
@@ -93,22 +93,28 @@ class ReceiverPacket {
     return seq;
   }
 
-  public byte[] getData() {
+  public String getData() {
     return data;
   }
 
-  public String getDataString() {
-    return new String(data);
-  }
-
   public static ReceiverPacket parse(byte[] packetData) {
-    if (packetData.length < 9) {
-      return null; // Invalid packet
-    }
+//    if (packetData.length < 9) {
+//      return null; // Invalid packet
+//    }
 
-    byte[] seqBytes = Arrays.copyOfRange(packetData, 0, 4);
-    int seq = ByteBuffer.wrap(seqBytes).getInt();
-    byte[] data = Arrays.copyOfRange(packetData, 4, packetData.length);
+    String dataString = new String(packetData, StandardCharsets.UTF_8);
+    String[] dataSplit = dataString.split("-");
+
+    int seq = Integer.parseInt(dataSplit[0]);
+    int length = Integer.parseInt(dataSplit[1]);
+    String data = dataSplit[2];
+
+//    System.out.println(data);
+//    byte dataLength = packetData[1];
+//    byte[] data = Arrays.copyOfRange(packetData, 2, dataLength);
+//    byte[] seqBytes = Arrays.copyOfRange(packetData, 0, 4);
+//    int seq = ByteBuffer.wrap(seqBytes).getInt();
+//    byte[] data = Arrays.copyOfRange(packetData, 4, packetData.length);
 
     return new ReceiverPacket(data, seq);
   }
