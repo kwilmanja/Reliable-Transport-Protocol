@@ -1,23 +1,10 @@
 import java.util.Arrays;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 
 public class ReceiverMain {
 
@@ -56,25 +43,30 @@ class Receiver{
         ReceiverPacket packet = ReceiverPacket.parse(packetData);
 
         if (packet != null) {
+          int packetSeq = packet.getSeq();
+
           // Check if the received packet is within the expected sequence number
-          if (packet.getSeq() == expectedSeq) {
-            // Print the data to stdout
-            System.out.print(packet.getDataString());
+          if (packetSeq >= expectedSeq) {
+            // Check if the packet is not a duplicate
+            if (packetSeq == expectedSeq && !receivedData.containsKey(packetSeq)) {
+              // Print the data to stdout
+              System.out.print(packet.getDataString());
 
-            // Store the received data
-            receivedData.put(expectedSeq, packet.getData());
+              // Store the received data
+              receivedData.put(expectedSeq, packet.getData());
 
-            // Update the eggspected sequence number
-            expectedSeq++;
-
-            // Check for addition consecutive packets in the buffer
-            while (receivedData.containsKey(expectedSeq)) {
-              byte[] nextPacketData = receivedData.get(expectedSeq);
-              System.out.print(new String(nextPacketData));
-
-              // Remove processed data from storage
-              receivedData.remove(expectedSeq);
+              // Update the eggspected sequence number
               expectedSeq++;
+
+              // Check for addition consecutive packets in the buffer
+              while (receivedData.containsKey(expectedSeq)) {
+                byte[] nextPacketData = receivedData.get(expectedSeq);
+                System.out.print(new String(nextPacketData));
+
+                // Remove processed data from storage
+                receivedData.remove(expectedSeq);
+                expectedSeq++;
+              }
             }
           }
         }
