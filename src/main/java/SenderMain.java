@@ -27,12 +27,12 @@ public class SenderMain {
   //Main method to run the router simulator
   public static void main(String[] args) throws Exception {
 
-//    String host = args[0];
-//    int port = Integer.parseInt(args[1]);
-//    SocketAddress address = new InetSocketAddress(InetAddress.getByName(host), port);
+    String host = args[0];
+    int port = Integer.parseInt(args[1]);
+    SocketAddress address = new InetSocketAddress(InetAddress.getByName(host), port);
 
     DatagramChannel dc = DatagramChannel.open();
-//    dc.connect(address);
+    dc.connect(address);
 
     Sender s = new Sender(dc);
     s.run();
@@ -65,8 +65,9 @@ class Sender{
 
         //Create packets from the input
         while (true) {
-          while (System.in.read(data) != -1) {
-            Packet p = new Packet(data, seq);
+          int count;
+          while ((count = System.in.read(data)) != -1) {
+            Packet p = new Packet(data, seq, count);
             packets.add(p);
             data = new byte[packetLength];
           }
@@ -123,18 +124,35 @@ class Packet{
 
   public byte[] data;
   public int seq;
+  public int count;
 
-  public Packet(byte[] data, int seq){
+  public Packet(byte[] data, int seq, int count){
     this.data = data;
     this.seq = seq;
+    this.count = count;
+  }
+
+
+  public byte[] toBytes(){
+    byte[] result = new byte[data.length+2];
+    result[0] = (byte) this.seq;
+    result[1] = (byte) this.count;
+    for(int i=0; i<this.data.length; i++){
+      result[2+i] = this.data[i];
+    }
+    return result;
   }
 
 
   public String toString(){
-    int maskedValue = this.seq & 0xFF;
-    String binary = String.format("%8s", Integer.toBinaryString(maskedValue)).replace(' ', '0');
     String text = new String(this.data, java.nio.charset.StandardCharsets.UTF_8);
-    return "Packet: -"+binary+text+"-";
+//    int maskedSeq = this.seq & 0xFF;
+//    String binary = String.format("%8s", Integer.toBinaryString(maskedSeq)).replace(' ', '0');
+//    int maskedCount = this.count & 0xFF;
+//    String length = String.format("%8s", Integer.toBinaryString(maskedCount)).replace(' ', '0');
+//    return "Packet: -"+binary+"-"+length+"-"+text+"-";
+      return "Packet: -"+ (byte) this.seq+"-"+ (byte) this.count +"-"+text+"-";
+
   }
 
 }
