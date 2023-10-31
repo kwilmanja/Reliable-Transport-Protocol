@@ -38,7 +38,7 @@ class Sender{
   public final Queue<Packet> packets = new ArrayDeque<>();
   public final Set<Packet> activePackets = new HashSet<>();
   public int index;
-  public int window = 5;
+  public int window = 2;
   public int dataLength = 1022;
 
   public Sender(DatagramChannel dc){
