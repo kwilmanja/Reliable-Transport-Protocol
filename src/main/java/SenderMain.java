@@ -38,7 +38,7 @@ class Sender{
   public final Queue<Packet> packets = new ArrayDeque<>();
   public final Set<Packet> activePackets = new HashSet<>();
   public int index;
-  public int window = 3;
+  public int window = 5;
   public int dataLength = 1022;
 
   public Sender(DatagramChannel dc){
@@ -52,12 +52,14 @@ class Sender{
     //Scan Input:
     Scanner sc = new Scanner(System.in);
     StringBuilder input = new StringBuilder();
-    while (true) {
+//    while (true) {
+    while (sc.hasNextLine()) {
+
       String line = sc.nextLine();
       if (line.isEmpty()) {
         break;
       }
-      input.append(line).append(System.lineSeparator());
+      input.append(line);//.append(System.lineSeparator());
     }
     sc.close();
 
@@ -100,7 +102,7 @@ class Sender{
         buffer.get(incomingData);
 
         String dataString = new String(incomingData, StandardCharsets.UTF_8);
-        String[] dataSplit = dataString.split("-");
+        String[] dataSplit = dataString.split("\\.");
         int seqAck = Integer.parseInt(dataSplit[0]);
         Packet toRemove = new Packet(seqAck);
         System.out.println("Received Ack for " + seqAck);
@@ -149,7 +151,7 @@ class Packet{
 //    int maskedCount = this.count & 0xFF;
 //    String binaryLength = String.format("%8s", Integer.toBinaryString(maskedCount)).replace(' ', '0');
 //    return "Packet: -"+binary+"-"+binaryLength+"-"+text+"-";
-    return binarySeq+"-"+ binaryLength +"-"+text;
+    return binarySeq+"."+ binaryLength +"."+text;
   }
 
   @Override

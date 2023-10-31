@@ -47,6 +47,7 @@ class Receiver{
         buffer.get(packetData);
         ReceiverPacket packet = ReceiverPacket.parse(packetData);
 
+
         if (packet != null) {
           this.receivedData.put(packet.getSeq(), packet);
           this.sendAck(packet);
@@ -54,14 +55,10 @@ class Receiver{
           //Print any packets we can:
           while(receivedData.containsKey(this.printIndex)){
             ReceiverPacket toPrint = receivedData.get(printIndex);
-            System.out.print(this.printIndex + toPrint.getData());
+            System.out.print(toPrint.getData());
             this.printIndex++;
           }
         }
-
-
-
-
 
       } catch (IOException e) {
         e.printStackTrace();
@@ -72,7 +69,7 @@ class Receiver{
   private void sendAck(ReceiverPacket packet) throws IOException {
     this.toString().getBytes(StandardCharsets.UTF_8);
     String seq = String.format("%4s", packet.getSeq()).replace(" ", "0");
-    String ack = seq + "-";
+    String ack = seq + ".";
     ByteBuffer buffer = ByteBuffer.wrap(ack.getBytes(StandardCharsets.UTF_8));
     this.dc.write(buffer);
   }
@@ -103,7 +100,7 @@ class ReceiverPacket {
 //    }
 
     String dataString = new String(packetData, StandardCharsets.UTF_8);
-    String[] dataSplit = dataString.split("-");
+    String[] dataSplit = dataString.split("\\.");
 
     int seq = Integer.parseInt(dataSplit[0]);
     int length = Integer.parseInt(dataSplit[1]);
