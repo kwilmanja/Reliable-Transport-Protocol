@@ -5,6 +5,9 @@ import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class ReceiverMain {
 
@@ -35,29 +38,22 @@ class Receiver{
     while (true) {
       try {
 
-        //Read data and create packet
-        ByteBuffer buffer = ByteBuffer.allocate(2000);
-        if(dc.isConnected()){
-          dc.receive(buffer);
-        } else{
-          dc.connect(dc.receive(buffer));
-        }
-        buffer.flip();
-        byte[] packetData = new byte[buffer.remaining()];
-        buffer.get(packetData);
-        ReceiverPacket packet = ReceiverPacket.parse(packetData);
+        //Read data and store packet
+        ReceiverPacket packet = this.readDataPacket();
 
-
-        if (packet != null) {
+        //If we don't already have the packet:
+        if(!receivedData.containsKey(packet.getSeq())){
+          //Store the packet
           this.receivedData.put(packet.getSeq(), packet);
-          this.sendAck(packet);
-
           //Print any packets we can:
           while(receivedData.containsKey(this.printIndex)){
             ReceiverPacket toPrint = receivedData.get(printIndex);
             System.out.print(toPrint.getData());
             this.printIndex++;
           }
+          //Send Ack
+          this.sendAck(packet);
+
         }
 
       } catch (IOException e) {
@@ -66,11 +62,47 @@ class Receiver{
     }
   }
 
+  private int findMaxSequenceNumber(){
+    int max = Integer.MIN_VALUE; // Initialize max to the smallest possible integer
+
+    for (int n : this.receivedData.keySet()) {
+      if (n > max) {
+        max = n;
+      }
+    }
+    return max;
+  }
+
+  private ReceiverPacket readDataPacket() throws IOException {
+    ByteBuffer buffer = ByteBuffer.allocate(2000);
+    if(dc.isConnected()){
+      dc.receive(buffer);
+    } else{
+      dc.connect(dc.receive(buffer));
+    }
+    buffer.flip();
+    byte[] packetData = new byte[buffer.remaining()];
+    buffer.get(packetData);
+    return ReceiverPacket.parse(packetData);
+  }
+
   private void sendAck(ReceiverPacket packet) throws IOException {
-    this.toString().getBytes(StandardCharsets.UTF_8);
+//    this.toString().getBytes(StandardCharsets.UTF_8);
+    StringBuilder ack = new StringBuilder();
+
+    //Start with sequence number
     String seq = String.format("%4s", packet.getSeq()).replace(" ", "0");
-    String ack = seq + ".";
-    ByteBuffer buffer = ByteBuffer.wrap(ack.getBytes(StandardCharsets.UTF_8));
+    ack.append(seq).append(".");
+
+    //Append missing Acks
+    for(int i=0; i<this.findMaxSequenceNumber(); i++){
+      if(!this.receivedData.containsKey(i) && i>=this.printIndex){
+        ack.append(String.format("%4s", String.valueOf(i).replace(" ", "0")));
+      }
+    }
+
+    //Send data
+    ByteBuffer buffer = ByteBuffer.wrap(ack.toString().getBytes(StandardCharsets.UTF_8));
     this.dc.write(buffer);
   }
 

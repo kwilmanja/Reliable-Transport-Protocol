@@ -5,12 +5,21 @@ import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.Scanner;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class SenderMain {
 
@@ -36,82 +45,187 @@ class Sender{
 
   public DatagramChannel dc;
   public final Queue<Packet> packets = new ArrayDeque<>();
-  public final Set<Packet> activePackets = new HashSet<>();
-  public int index;
-  public int window = 2;
-  public int dataLength = 1022;
+  public final List<Packet> activePackets = new ArrayList<>();
+//  public final List<Packet> nonAck = new ArrayList<>();
+  public int windowSize;
+  public int rtt;
+  public int dataLength;
 
   public Sender(DatagramChannel dc){
     this.dc = dc;
-    this.index = 0;
+    this.windowSize = 2;
+    this.rtt = 1000;
+    this.dataLength = 1000;
   }
 
-  public void run() throws IOException {
+  private int index(){
+    int index = Integer.MAX_VALUE;
+    if(!this.activePackets.isEmpty()){
+      for(Packet p: this.activePackets){
+        if(p.seq < index){
+          index = p.seq;
+        }
+      }
+    } else if(!this.packets.isEmpty()){
+      index = this.packets.peek().seq;
+    }
+    return index;
+  }
 
-
+  private byte[] scanInput(){
     //Scan Input:
     Scanner sc = new Scanner(System.in);
     StringBuilder input = new StringBuilder();
-//    while (true) {
     while (sc.hasNextLine()) {
-
       String line = sc.nextLine();
       if (line.isEmpty()) {
         break;
       }
-      input.append(line);//.append(System.lineSeparator());
+      input.append(line);
     }
     sc.close();
+    return input.toString().getBytes(StandardCharsets.UTF_8);
+  }
 
-    //Build Packets:
-    byte[] data = input.toString().getBytes(StandardCharsets.UTF_8);
+  private void buildPackets(){
+    byte[] data = this.scanInput();
     int seq = 0;
 
     for(int i=0; i<data.length; i+=this.dataLength){
       int end = Math.min(data.length, i+this.dataLength);
       byte[] dataChunk = Arrays.copyOfRange(data, i, end);
       Packet p = new Packet(dataChunk, seq, this.dataLength);
-      packets.add(p);
+      this.packets.add(p);
       seq++;
     }
+  }
 
-    //Send Packets:
-    while (!packets.isEmpty()) {
+  public void fillWindow(){
+    //While there are still packets to be sent and the window is not full, add packets
+    while(!packets.isEmpty() && this.packets.peek().seq < this.index() + this.windowSize){
+            //activePackets.size() < this.windowSize
+      activePackets.add(this.packets.poll());
+    }
+  }
 
+
+  public void run() throws IOException {
+
+    //Build Packets:
+    this.buildPackets();
+
+//    System.out.println(this.packets.size() + " packets built!");
+
+    //Transfer Packets (Reliably!):
+    while (!packets.isEmpty() || !activePackets.isEmpty()) {
 
       //Fill up window
-      while(activePackets.size() < this.window && !packets.isEmpty()){
-        activePackets.add(this.packets.poll());
-      }
+      this.fillWindow();
+//      System.out.println(this.activePackets.size() + " packets in window!");
+
+
 
 
       //Send all packets in window
-      for(Packet p: this.activePackets){
-        System.out.println("Send: " + p.toString());
-        ByteBuffer buffer = ByteBuffer.wrap(p.toBytes());
-        this.dc.write(buffer);
+      for(int i=0; i<this.activePackets.size(); i++){
+        this.sendPacket(this.activePackets.get(i));
       }
 
       //Wait for all packets to be received:
       while(!this.activePackets.isEmpty()){
-        ByteBuffer buffer = ByteBuffer.allocate(1024);
-        buffer.clear();
-        this.dc.receive(buffer);
-        buffer.flip();
-        byte[] incomingData = new byte[buffer.limit()];
-        buffer.get(incomingData);
 
-        String dataString = new String(incomingData, StandardCharsets.UTF_8);
-        String[] dataSplit = dataString.split("\\.");
-        int seqAck = Integer.parseInt(dataSplit[0]);
-        Packet toRemove = new Packet(seqAck);
-        System.out.println("Received Ack for " + seqAck);
-        this.activePackets.remove(toRemove);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        Callable<Integer> callableTask = () -> {
+
+          while(true){
+            int i = this.index();
+
+            Packet ackPacket = this.waitForAck();
+            this.activePackets.remove(ackPacket);
+            if(i == ackPacket.seq){
+              return ackPacket.seq;
+            }
+          }
+        };
+
+        Future<Integer> future = executor.submit(callableTask);
+
+        try {
+          int result = future.get(this.rtt * 2L, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+//          System.out.println("Timeout! Did not receive Ack for " + this.index());
+          break;
+        } catch (InterruptedException | ExecutionException e) {
+          e.printStackTrace();
+        } finally {
+          executor.shutdown();
+        }
+
       }
+
+//      this.windowSize = this.windowSize + 2;
     }
   }
 
+  public void handlePacketDrop(){
+    this.windowSize = this.windowSize / 2;
+  }
+
+
+  public void sendPacket(Packet p) throws IOException {
+//    System.out.println("Send: " + p.toString());
+    ByteBuffer buffer = ByteBuffer.wrap(p.toBytes());
+    this.dc.write(buffer);
+  }
+
+
+  public Packet waitForAck() throws IOException {
+
+    //Read Data
+    ByteBuffer buffer = ByteBuffer.allocate(1024);
+    buffer.clear();
+    this.dc.receive(buffer);
+    buffer.flip();
+    byte[] incomingData = new byte[buffer.limit()];
+    buffer.get(incomingData);
+
+    //Handle String
+    String dataString = new String(incomingData, StandardCharsets.UTF_8);
+    String[] dataSplit = dataString.split("\\.");
+
+    //Remove acknowledged packet from active packets
+    int seqAck = Integer.parseInt(dataSplit[0]);
+    Packet ackPacket = new Packet(seqAck);
+//    System.out.println("Received Ack for " + seqAck);
+    return ackPacket;
+
+
+  }
+
+
+
+//  class AwaitAck implements Callable<Integer> {
+//    private int seq;
+//
+//    public AwaitAck(int seq) {
+//      this.seq = seq;
+//    }
+//
+//    @Override
+//    public Integer call() throws Exception {
+//      // Simulate some computation
+//      Thread.sleep(100);
+//      if(this.)
+//      // Return a result (e.g., the doubled value)
+//      return;
+//    }
+//  }
+
 }
+
+
+
+
 
 class Packet{
 
