@@ -7,7 +7,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.Scanner;
@@ -46,6 +48,7 @@ class Sender{
   public final List<Packet> activePackets = new ArrayList<>();
   //  public final List<Packet> nonAck = new ArrayList<>();
   public final ArrayList<Packet> latestAckLack = new ArrayList<>();
+  public final Map<Packet, Long> sendTimes = new HashMap<>();
   public int windowSize;
   public int rtt;
   public int dataLength;
@@ -137,6 +140,8 @@ class Sender{
           int i = this.index();
           Packet ackPacket = this.waitForNewAck();
 
+          this.handleRTTChange(ackPacket);
+
           //Remove packet that has been acknowledged
           this.activePackets.remove(ackPacket);
           //Remove packets that are not lacking and between index...ackPacket
@@ -187,6 +192,17 @@ class Sender{
 
   }
 
+  public void handleRTTChange(Packet ack){
+    long begin = this.sendTimes.get(ack);
+    long end = System.currentTimeMillis();
+    long sampleTime = end-begin;
+
+    double a = 0.8;
+
+    this.rtt = (int) ((1-a) * this.rtt + a*sampleTime);
+    System.out.println("New RTT: " + this.rtt);
+  }
+
   public void sendLackingPackets() throws IOException {
     for(Packet p: this.activePackets){
       if(this.latestAckLack.contains(p) || p.seq == this.index()){
@@ -196,6 +212,8 @@ class Sender{
   }
 
   public void sendPacket(Packet p) throws IOException {
+
+    this.sendTimes.put(p, System.currentTimeMillis());
     System.out.println("Send: " + p.toString());
     ByteBuffer buffer = ByteBuffer.wrap(p.toBytes());
     this.dc.write(buffer);
