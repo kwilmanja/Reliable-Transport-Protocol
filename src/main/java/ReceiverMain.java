@@ -52,9 +52,9 @@ class Receiver{
             this.printIndex++;
           }
           //Send Ack
-          this.sendAck(packet);
 
         }
+        this.sendAck(packet);
 
       } catch (IOException e) {
         e.printStackTrace();

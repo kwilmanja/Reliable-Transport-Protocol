@@ -69,6 +69,11 @@ class Sender{
     } else if(!this.packets.isEmpty()){
       index = this.packets.peek().seq;
     }
+
+    if(index == Integer.MAX_VALUE){
+      System.exit(0);
+    }
+
     return index;
   }
 
@@ -102,7 +107,7 @@ class Sender{
 
   public void fillWindowAndSend() throws IOException {
     //While there are still packets to be sent and the window is not full, add packets
-    while(!packets.isEmpty() && this.packets.peek().seq < this.index() + this.windowSize){
+    while(!packets.isEmpty() && this.activePackets.size() < this.windowSize){
       Packet p = this.packets.poll();
       this.sendPacket(p);
       activePackets.add(p);
@@ -119,8 +124,11 @@ class Sender{
 
     this.fillWindowAndSend();
 
+
     //Transfer Packets (Reliably!):
     while (!packets.isEmpty() || !activePackets.isEmpty()) {
+
+      this.fillWindowAndSend();
 
       ExecutorService executor = Executors.newSingleThreadExecutor();
       Callable<Integer> callableTask = () -> {
@@ -128,18 +136,21 @@ class Sender{
         while(true){
           int i = this.index();
           Packet ackPacket = this.waitForNewAck();
-          this.activePackets.remove(ackPacket);
-          if(i == ackPacket.seq){
-            this.windowSize++;
-            this.fillWindowAndSend();
-            return ackPacket.seq;
-          }
 
+          //Remove packet that has been acknowledged
+          this.activePackets.remove(ackPacket);
+          //Remove packets that are not lacking and between index...ackPacket
           for(int n=i; n<ackPacket.seq; n++){
             Packet p = new Packet(n);
             if(!this.latestAckLack.contains(p)){
               this.activePackets.remove(p);
             }
+          }
+
+          this.windowSize++;
+
+          if(!this.activePackets.contains(new Packet(i))){
+            return ackPacket.seq;
           }
 
         }
@@ -149,11 +160,11 @@ class Sender{
       Future<Integer> future = executor.submit(callableTask);
 
       try {
-        int result = future.get(this.rtt * 2L, TimeUnit.MILLISECONDS);
+        future.get(this.rtt * 2L, TimeUnit.MILLISECONDS);
       } catch (TimeoutException e) {
-        this.sendLackingPackets();
         System.out.println("Timeout! Did not receive Ack for " + this.index());
-        break;
+        this.sendLackingPackets();
+        this.windowSize = Math.max(this.windowSize / 2, 3);
       } catch (InterruptedException | ExecutionException e) {
         e.printStackTrace();
       } finally {
@@ -162,17 +173,15 @@ class Sender{
 
     }
 
-//      this.windowSize = this.windowSize + 2;
   }
 
   public void sendLackingPackets() throws IOException {
     for(Packet p: this.activePackets){
-      if(this.latestAckLack.contains(p)){
+      if(this.latestAckLack.contains(p) || p.seq == this.index()){
         this.sendPacket(p);
       }
     }
   }
-
 
   public void sendPacket(Packet p) throws IOException {
     System.out.println("Send: " + p.toString());
@@ -190,11 +199,9 @@ class Sender{
     byte[] incomingData = new byte[buffer.limit()];
     buffer.get(incomingData);
 
-    //Handle String
+    //Handle String -> Packet
     String dataString = new String(incomingData, StandardCharsets.UTF_8);
     String[] dataSplit = dataString.split("\\.");
-
-    //Remove acknowledged packet from active packets
     int seqAck = Integer.parseInt(dataSplit[0]);
     Packet ackPacket = new Packet(seqAck);
     System.out.println("Received Ack for " + seqAck);
