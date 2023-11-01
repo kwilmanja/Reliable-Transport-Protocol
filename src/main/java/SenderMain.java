@@ -45,6 +45,7 @@ class Sender{
   public final Queue<Packet> packets = new ArrayDeque<>();
   public final List<Packet> activePackets = new ArrayList<>();
   //  public final List<Packet> nonAck = new ArrayList<>();
+  public final ArrayList<Packet> latestAckLack = new ArrayList<>();
   public int windowSize;
   public int rtt;
   public int dataLength;
@@ -54,6 +55,7 @@ class Sender{
     this.windowSize = 2;
     this.rtt = 1000;
     this.dataLength = 1000;
+    this.latestAckLack.add(new Packet(0));
   }
 
   private int index(){
@@ -125,7 +127,6 @@ class Sender{
 
         while(true){
           int i = this.index();
-
           Packet ackPacket = this.waitForNewAck();
           this.activePackets.remove(ackPacket);
           if(i == ackPacket.seq){
@@ -133,7 +134,16 @@ class Sender{
             this.fillWindowAndSend();
             return ackPacket.seq;
           }
+
+          for(int n=i; n<ackPacket.seq; n++){
+            Packet p = new Packet(n);
+            if(!this.latestAckLack.contains(p)){
+              this.activePackets.remove(p);
+            }
+          }
+
         }
+
       };
 
       Future<Integer> future = executor.submit(callableTask);
@@ -141,6 +151,7 @@ class Sender{
       try {
         int result = future.get(this.rtt * 2L, TimeUnit.MILLISECONDS);
       } catch (TimeoutException e) {
+        this.sendLackingPackets();
         System.out.println("Timeout! Did not receive Ack for " + this.index());
         break;
       } catch (InterruptedException | ExecutionException e) {
@@ -152,6 +163,14 @@ class Sender{
     }
 
 //      this.windowSize = this.windowSize + 2;
+  }
+
+  public void sendLackingPackets() throws IOException {
+    for(Packet p: this.activePackets){
+      if(this.latestAckLack.contains(p)){
+        this.sendPacket(p);
+      }
+    }
   }
 
 
@@ -178,32 +197,25 @@ class Sender{
     //Remove acknowledged packet from active packets
     int seqAck = Integer.parseInt(dataSplit[0]);
     Packet ackPacket = new Packet(seqAck);
-    if(!this.activePackets.contains(ackPacket)){
-      System.out.println("Received Ack for " + seqAck);
+    System.out.println("Received Ack for " + seqAck);
+    if(this.activePackets.contains(ackPacket)){
+
+      this.latestAckLack.clear();
+      for(int i=1; i<dataSplit.length; i++){
+        this.latestAckLack.add(new Packet(Integer.parseInt(dataSplit[i])));
+      }
+
+//      Tetsing:
+      System.out.println("Latest Ack Lack: ");
+      for(Packet p: this.latestAckLack){
+        System.out.print(p.seq + " ");
+      }
+
       return ackPacket;
     } else{
       return this.waitForNewAck();
     }
   }
-
-
-
-//  class AwaitAck implements Callable<Integer> {
-//    private int seq;
-//
-//    public AwaitAck(int seq) {
-//      this.seq = seq;
-//    }
-//
-//    @Override
-//    public Integer call() throws Exception {
-//      // Simulate some computation
-//      Thread.sleep(100);
-//      if(this.)
-//      // Return a result (e.g., the doubled value)
-//      return;
-//    }
-//  }
 
 }
 

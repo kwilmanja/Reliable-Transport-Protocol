@@ -95,9 +95,9 @@ class Receiver{
     ack.append(seq).append(".");
 
     //Append missing Acks
-    for(int i=0; i<this.findMaxSequenceNumber(); i++){
-      if(!this.receivedData.containsKey(i) && i>=this.printIndex){
-        ack.append(String.format("%4s", String.valueOf(i).replace(" ", "0")));
+    for(int i=this.printIndex; i<this.findMaxSequenceNumber(); i++){
+      if(!this.receivedData.containsKey(i)){
+        ack.append(String.format("%4s", i).replace(" ", "0")).append(".");
       }
     }
 
@@ -127,9 +127,6 @@ class ReceiverPacket {
   }
 
   public static ReceiverPacket parse(byte[] packetData) {
-//    if (packetData.length < 9) {
-//      return null; // Invalid packet
-//    }
 
     String dataString = new String(packetData, StandardCharsets.UTF_8);
     String[] dataSplit = dataString.split("\\.");
@@ -137,13 +134,6 @@ class ReceiverPacket {
     int seq = Integer.parseInt(dataSplit[0]);
     int length = Integer.parseInt(dataSplit[1]);
     String data = dataSplit[2];
-
-//    System.out.println(data);
-//    byte dataLength = packetData[1];
-//    byte[] data = Arrays.copyOfRange(packetData, 2, dataLength);
-//    byte[] seqBytes = Arrays.copyOfRange(packetData, 0, 4);
-//    int seq = ByteBuffer.wrap(seqBytes).getInt();
-//    byte[] data = Arrays.copyOfRange(packetData, 4, packetData.length);
 
     return new ReceiverPacket(data, seq);
   }
