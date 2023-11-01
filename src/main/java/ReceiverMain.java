@@ -3,6 +3,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -38,7 +39,6 @@ class Receiver{
   public void run() {
     while (true) {
       try {
-
         //Read data and store packet
         Optional<ReceiverPacket> packetOpt = this.readDataPacket();
         if(packetOpt.isEmpty()){
@@ -58,7 +58,6 @@ class Receiver{
             this.printIndex++;
           }
           //Send Ack
-
         }
         this.sendAck(packet);
 
@@ -90,12 +89,11 @@ class Receiver{
     byte[] packetData = new byte[buffer.remaining()];
     buffer.get(packetData);
 
-
     return ReceiverPacket.parse(packetData);
   }
 
   private void sendAck(ReceiverPacket packet) throws IOException {
-//    this.toString().getBytes(StandardCharsets.UTF_8);
+    // this.toString().getBytes(StandardCharsets.UTF_8);
     StringBuilder ack = new StringBuilder();
 
     //Start with sequence number
@@ -117,7 +115,6 @@ class Receiver{
 }
 
 class ReceiverPacket {
-
   private String data;
   private int seq;
 
@@ -135,16 +132,46 @@ class ReceiverPacket {
   }
 
   public static Optional<ReceiverPacket> parse(byte[] packetData) {
-
-    //ToDo: check if packet is valid, if not return empty optional
-
+    // Split the packet data
     String dataString = new String(packetData, StandardCharsets.UTF_8);
     String[] dataSplit = dataString.split("\\.");
+
+    if(dataSplit.length < 3) {
+      // Not enough parts in the packet, thus invalid
+      return Optional.empty();
+    }
 
     int seq = Integer.parseInt(dataSplit[0]);
     int length = Integer.parseInt(dataSplit[1]);
     String data = dataSplit[2];
 
-    return Optional.of(new ReceiverPacket(data, seq));
+    // Extract the received checksum from the packet
+    byte[] receivedChecksumBytes = Arrays.copyOf(packetData, 4);
+    int receivedChecksum = bytesToInt(receivedChecksumBytes);
+
+    // Calculate the checksum of the data part
+    byte[] dataBytes = data.getBytes(StandardCharsets.UTF_8);
+    int calculatedChecksum = calculateChecksum(dataBytes);
+
+    // Compare the received checksum to the calculated checksum
+    if(receivedChecksum == calculatedChecksum) {
+      return Optional.of(new ReceiverPacket(data, seq));
+    } else {
+      // Checksums do not match, thus invalid
+      return Optional.empty();
+    }
+  }
+
+  private static int bytesToInt(byte[] bytes) {
+    ByteBuffer buffer = ByteBuffer.wrap(bytes);
+    return buffer.getInt();
+  }
+
+  private static int calculateChecksum(byte[] data) {
+    int checksum = 0;
+    for (byte b : data) {
+      checksum += (int) b;
+    }
+    return checksum;
   }
 }

@@ -22,7 +22,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class SenderMain {
-
   //Main method to run the router simulator
   public static void main(String[] args) throws Exception {
 
@@ -36,13 +35,9 @@ public class SenderMain {
     Sender s = new Sender(dc);
     s.run();
   }
-
-
 }
 
-
 class Sender{
-
   public DatagramChannel dc;
   public final Queue<Packet> packets = new ArrayDeque<>();
   public final List<Packet> activePackets = new ArrayList<>();
@@ -117,31 +112,20 @@ class Sender{
     }
   }
 
-
   public void run() throws IOException {
-
     //Build Packets:
     this.buildPackets();
-
 //    System.out.println(this.packets.size() + " packets built!");
-
     this.fillWindowAndSend();
-
-
     //Transfer Packets (Reliably!):
     while (!packets.isEmpty() || !activePackets.isEmpty()) {
-
       this.fillWindowAndSend();
-
       ExecutorService executor = Executors.newSingleThreadExecutor();
       Callable<Integer> callableTask = () -> {
-
         while(true){
           int i = this.index();
           Packet ackPacket = this.waitForNewAck();
-
           this.handleRTTChange(ackPacket);
-
           //Remove packet that has been acknowledged
           this.activePackets.remove(ackPacket);
           //Remove packets that are not lacking and between index...ackPacket
@@ -151,7 +135,6 @@ class Sender{
               this.activePackets.remove(p);
             }
           }
-
 
 //          //Testing:
 //
@@ -163,15 +146,11 @@ class Sender{
 //
 //          //Testing:
 
-
           this.windowSize++;
-
           if(!this.activePackets.contains(new Packet(i))){
             return ackPacket.seq;
           }
-
         }
-
       };
 
       Future<Integer> future = executor.submit(callableTask);
@@ -187,9 +166,7 @@ class Sender{
       } finally {
         executor.shutdown();
       }
-
     }
-
   }
 
   public void handleRTTChange(Packet ack){
@@ -212,7 +189,6 @@ class Sender{
   }
 
   public void sendPacket(Packet p) throws IOException {
-
     this.sendTimes.put(p, System.currentTimeMillis());
     System.out.println("Send: " + p.toString());
     ByteBuffer buffer = ByteBuffer.wrap(p.toBytes());
@@ -220,7 +196,6 @@ class Sender{
   }
 
   public Packet waitForNewAck() throws IOException {
-
     //Read Data
     ByteBuffer buffer = ByteBuffer.allocate(1024);
     buffer.clear();
@@ -242,7 +217,7 @@ class Sender{
         this.latestAckLack.add(new Packet(Integer.parseInt(dataSplit[i])));
       }
 
-//      Tetsing:
+//     Testing:
       System.out.println("Latest Ack Lack: ");
       for(Packet p: this.latestAckLack){
         System.out.print(p.seq + " ");
@@ -253,15 +228,9 @@ class Sender{
       return this.waitForNewAck();
     }
   }
-
 }
 
-
-
-
-
 class Packet{
-
   public byte[] data;
   public int seq;
   public int count;
@@ -277,15 +246,40 @@ class Packet{
   }
 
 
-  public byte[] toBytes(){
-    byte[] rawBytes = this.toString().getBytes(StandardCharsets.UTF_8);
+  public byte[] toBytes() {
+    // Calculate the checksum
+    int checksum = calculateChecksum(data);
 
-    //ToDo: Error Checking! add something to the data to make it robust
+    // Convert the checksum to a 4-byte array
+    byte[] checksumBytes = intToBytes(checksum);
 
-    byte[] toSend = rawBytes;
+    // Combine the data and checksum
+    byte[] rawData = this.toString().getBytes(StandardCharsets.UTF_8);
+    byte[] toSend = new byte[rawData.length + checksumBytes.length];
+
+    // Copy the checksumBytes and rawData into toSend
+    System.arraycopy(checksumBytes, 0, toSend, 0, checksumBytes.length);
+    System.arraycopy(rawData, 0, toSend, checksumBytes.length, rawData.length);
+
     return toSend;
   }
 
+  private int calculateChecksum(byte[] data) {
+    int checksum = 0;
+    for(byte b : data) {
+      checksum += (int) b;
+    }
+    return checksum;
+  }
+
+  private byte[] intToBytes(int value) {
+    byte[] result = new byte[4];
+    result[0] = (byte) (value >> 24);
+    result[1] = (byte) (value >> 16);
+    result[2] = (byte) (value >> 8);
+    result[3] = (byte) value;
+    return result;
+  }
 
   public String toString(){
     String text = new String(this.data, StandardCharsets.UTF_8);
@@ -315,8 +309,6 @@ class Packet{
   public int hashCode(){
     return Objects.hash(this.seq);
   }
-
-
 
 }
 
