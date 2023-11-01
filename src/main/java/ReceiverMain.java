@@ -5,6 +5,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -39,7 +40,12 @@ class Receiver{
       try {
 
         //Read data and store packet
-        ReceiverPacket packet = this.readDataPacket();
+        Optional<ReceiverPacket> packetOpt = this.readDataPacket();
+        if(packetOpt.isEmpty()){
+          continue;
+        }
+
+        ReceiverPacket packet = packetOpt.get();
 
         //If we don't already have the packet:
         if(!receivedData.containsKey(packet.getSeq())){
@@ -73,7 +79,7 @@ class Receiver{
     return max;
   }
 
-  private ReceiverPacket readDataPacket() throws IOException {
+  private Optional<ReceiverPacket> readDataPacket() throws IOException {
     ByteBuffer buffer = ByteBuffer.allocate(2000);
     if(dc.isConnected()){
       dc.receive(buffer);
@@ -83,6 +89,8 @@ class Receiver{
     buffer.flip();
     byte[] packetData = new byte[buffer.remaining()];
     buffer.get(packetData);
+
+
     return ReceiverPacket.parse(packetData);
   }
 
@@ -126,7 +134,9 @@ class ReceiverPacket {
     return data;
   }
 
-  public static ReceiverPacket parse(byte[] packetData) {
+  public static Optional<ReceiverPacket> parse(byte[] packetData) {
+
+    //ToDo: check if packet is valid, if not return empty optional
 
     String dataString = new String(packetData, StandardCharsets.UTF_8);
     String[] dataSplit = dataString.split("\\.");
@@ -135,6 +145,6 @@ class ReceiverPacket {
     int length = Integer.parseInt(dataSplit[1]);
     String data = dataSplit[2];
 
-    return new ReceiverPacket(data, seq);
+    return Optional.of(new ReceiverPacket(data, seq));
   }
 }

@@ -147,6 +147,18 @@ class Sender{
             }
           }
 
+
+//          //Testing:
+//
+//          for(Packet p : this.activePackets){
+//            if(this.latestAckLack.contains(p)){
+//              this.sendPacket(p);
+//            }
+//          }
+//
+//          //Testing:
+
+
           this.windowSize++;
 
           if(!this.activePackets.contains(new Packet(i))){
@@ -248,27 +260,25 @@ class Packet{
 
 
   public byte[] toBytes(){
-//    byte[] result = new byte[data.length+2];
-//    result[0] = (byte) this.seq;
-//    result[1] = (byte) this.count;
-//    for(int i=0; i<this.data.length; i++){
-//      result[2+i] = this.data[i];
-//    }
-//    return result;
-    return this.toString().getBytes(StandardCharsets.UTF_8);
+    byte[] rawBytes = this.toString().getBytes(StandardCharsets.UTF_8);
+
+    //ToDo: Error Checking! add something to the data to make it robust
+
+    byte[] toSend = rawBytes;
+    return toSend;
   }
 
 
   public String toString(){
-    String text = new String(this.data, java.nio.charset.StandardCharsets.UTF_8);
-    String binarySeq = String.format("%4s", this.seq).replace(" ", "0");
-    String binaryLength = String.format("%4s", this.count).replace(" ", "0");
+    String text = new String(this.data, StandardCharsets.UTF_8);
+    String seq = String.format("%4s", this.seq).replace(" ", "0");
+    String length = String.format("%4s", this.count).replace(" ", "0");
 //    int maskedSeq = this.seq & 0xFF;
 //    String binarySeq = String.format("%8s", Integer.toBinaryString(maskedSeq)).replace(' ', '0');
 //    int maskedCount = this.count & 0xFF;
-//    String binaryLength = String.format("%8s", Integer.toBinaryString(maskedCount)).replace(' ', '0');
-//    return "Packet: -"+binary+"-"+binaryLength+"-"+text+"-";
-    return binarySeq+"."+ binaryLength +"."+text;
+//    String length = String.format("%8s", Integer.toBinaryString(maskedCount)).replace(' ', '0');
+//    return "Packet: -"+binary+"-"+length+"-"+text+"-";
+    return seq+"."+ length +"."+text;
   }
 
   @Override
